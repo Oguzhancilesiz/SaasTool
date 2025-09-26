@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Concrete\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Mapster" Version="7.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SaasTool.Core\SaasTool.Core.csproj" />
+    <ProjectReference Include="..\SaasTool.DAL\SaasTool.DAL.csproj" />
+    <ProjectReference Include="..\SaasTool.DTO\SaasTool.DTO.csproj" />
+    <ProjectReference Include="..\SaasTool.Entity\SaasTool.Entity.csproj" />
+  </ItemGroup>
+
+</Project>
