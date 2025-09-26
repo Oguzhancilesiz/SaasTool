@@ -27,24 +27,6 @@ namespace SaasTool.Service.MapsterMap
             //config.NewConfig<ProductDTO, ProductUpdateDTO>()
             //    .Map(dest => dest, src => src);
             //#endregion
-
-            //#region CategoryMap
-            //config.NewConfig<Category, CategoryDTO>()
-            //       .Map(dest => dest, src => src);
-            //config.NewConfig<Category, CategoryAddDTO>()
-            //     .Map(dest => dest, src => src);
-            //config.NewConfig<Category, CategoryUpdateDTO>()
-            //    .Map(dest => dest, src => src);
-            //#endregion
-
-            //#region CityMap
-            //config.NewConfig<City, CityDTO>()
-            //       .Map(dest => dest, src => src);
-            //config.NewConfig<City, CityAddDTO>()
-            //     .Map(dest => dest, src => src);
-            //config.NewConfig<City, CityUpdateDTO>()
-            //    .Map(dest => dest, src => src);
-            //#endregion
         }
     }
 }

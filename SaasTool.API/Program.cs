@@ -1,75 +1,120 @@
-
+ï»¿using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using SaasTool.Core.Abstracts;
+using Hellang.Middleware.ProblemDetails;
+using Serilog;
 using SaasTool.DAL;
 using SaasTool.Entity;
+using SaasTool.Core.Abstracts;
+using Mapster;
+using MapsterMapper;
 
 namespace SaasTool.API
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container.
-            builder.Services.AddControllersWithViews();
+            // Serilog
+            builder.Host.UseSerilog((ctx, lc) => lc.ReadFrom.Configuration(ctx.Configuration).WriteTo.Console());
 
-            builder.Services.AddDbContext<BaseContext>(x => x.UseSqlServer(builder.Configuration.GetConnectionString("dbCon")));
+            // DbContext (retry-on-failure ile)
+            builder.Services.AddDbContext<BaseContext>(opt =>
+                opt.UseSqlServer(builder.Configuration.GetConnectionString("dbCon"),
+                    sql => sql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null)));
 
-            //Session'ý kullanabilmek için gerekli ayarlarý yapýyoruz.
-            builder.Services.AddSession(option =>
+            // Identity
+            builder.Services.AddIdentityCore<AppUser>(opt =>
             {
-                option.IdleTimeout = TimeSpan.FromMinutes(30); //Session 30 dakika sonra sonlanacak.
-                option.Cookie.HttpOnly = true; //Cookie'ye javascript eriþimini engelliyoruz.
-                option.Cookie.IsEssential = true; //Session'ý kullanabilmek için gerekli.
+                opt.User.RequireUniqueEmail = true;
+                opt.Password.RequiredLength = 6;
+                opt.Password.RequireDigit = false;
+                opt.Password.RequireUppercase = false;
+                opt.Password.RequireNonAlphanumeric = false;
+                opt.Password.RequireLowercase = false;
+            })
+            .AddRoles<AppRole>()
+            .AddEntityFrameworkStores<BaseContext>()
+            .AddSignInManager<SignInManager<AppUser>>();
 
+            // Auth (JWT ayarlarÄ±nÄ± sonra ekleyeceÄŸiz)
+            builder.Services.AddAuthentication().AddJwtBearer();
+
+            // IoC
+            builder.Services.AddScoped<IEFContext, BaseContext>();
+            builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+            // Mapster (Service projesindeki MapsterConfigâ€™i tara)
+            var mapsterCfg = TypeAdapterConfig.GlobalSettings;
+            mapsterCfg.Scan(typeof(SaasTool.Service.MapsterMap.MapsterConfig).Assembly);
+            builder.Services.AddSingleton(mapsterCfg);
+            builder.Services.AddScoped<IMapper, ServiceMapper>();
+
+            // Controllers + ProblemDetails + Swagger
+            builder.Services.AddControllers();
+            builder.Services.AddProblemDetails(opts =>
+            {
+                opts.IncludeExceptionDetails = (ctx, ex) => builder.Environment.IsDevelopment();
+                opts.MapToStatusCode<InvalidOperationException>(StatusCodes.Status400BadRequest);
+            });
+            builder.Services.AddEndpointsApiExplorer();
+            builder.Services.AddSwaggerGen();
+
+            // CORS (geliÅŸtirmede serbest, prodâ€™da whitelist kullan)
+            var origins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? Array.Empty<string>();
+            builder.Services.AddCors(opt =>
+            {
+                if (origins.Length > 0)
+                {
+                    opt.AddPolicy("default", p => p
+                        .WithOrigins(origins)
+                        .AllowAnyHeader()
+                        .AllowAnyMethod()
+                        .AllowCredentials());
+                }
+                else
+                {
+                    // Dev iÃ§in: dikkat, cred ile geniÅŸ origin kullanma
+                    opt.AddPolicy("default", p => p
+                        .AllowAnyHeader()
+                        .AllowAnyMethod()
+                        .SetIsOriginAllowed(_ => true));
+                }
             });
 
-            builder.Services.AddIdentity<AppUser, AppRole>(option =>
-            {
-                option.User.RequireUniqueEmail = true;
-                option.Password.RequiredLength = 3;
-                option.Password.RequireDigit = false;
-                option.Password.RequiredUniqueChars = 0;
-                option.Password.RequireUppercase = false;
-                option.Password.RequireNonAlphanumeric = false;
-                option.Password.RequireLowercase = false;
-            }).AddEntityFrameworkStores<BaseContext>();
+            // HealthChecks
+            builder.Services.AddHealthChecks()
+                .AddDbContextCheck<BaseContext>("db");
 
-            //IOC -> Razor View Engine Dependency Injection yapmak için hangi interface hangi classla eþleþiyor buradan bilgi alýyor.
-            builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
-            builder.Services.AddScoped<IEFContext, BaseContext>();
             var app = builder.Build();
 
-            // Configure the HTTP request pipeline.
-            if (!app.Environment.IsDevelopment())
+            // Pipeline
+            app.UseSerilogRequestLogging();
+            app.UseProblemDetails();
+
+            if (app.Environment.IsDevelopment())
             {
-                app.UseExceptionHandler("/Home/Error");
-                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
-                app.UseHsts();
+                app.UseSwagger();
+                app.UseSwaggerUI();
             }
 
             app.UseHttpsRedirection();
-            app.UseRouting();
-
-            app.UseSession();
-
+            app.UseCors("default");
+            app.UseAuthentication();
             app.UseAuthorization();
 
-            app.MapStaticAssets();
+            app.MapControllers();
+            app.MapHealthChecks("/health");
 
-            app.MapControllerRoute(
-                       name: "areas",
-                       pattern: "{area:exists}/{controller=Home}/{action=Index}/{id?}"
-                     );
-            app.MapControllerRoute(
-                name: "default",
-                pattern: "{controller=Home}/{action=Index}/{id?}")
-                .WithStaticAssets();
+            // Migrate (dev kolaylÄ±ÄŸÄ±)
+            using (var scope = app.Services.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<BaseContext>();
+                await db.Database.MigrateAsync();
+            }
 
-
-            app.Run();
+            await app.RunAsync();
         }
     }
 }
