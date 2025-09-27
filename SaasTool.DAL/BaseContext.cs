@@ -39,16 +39,24 @@ namespace SaasTool.DAL
             modelBuilder.ApplyConfigurationsFromAssembly(typeof(SaasTool.Mapping.BaseMap<>).Assembly);
 
             // Global soft-delete filter: Status != Deleted
-            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            //foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            //{
+            //    if (typeof(IEntity).IsAssignableFrom(entityType.ClrType))
+            //    {
+            //        var param = Expression.Parameter(entityType.ClrType, "e");
+            //        var statusProp = Expression.Property(param, nameof(IEntity.Status));
+            //        var deletedConst = Expression.Constant(SaasTool.Core.Enums.Status.Deleted);
+            //        var body = Expression.NotEqual(statusProp, deletedConst);
+            //        var lambda = Expression.Lambda(body, param);
+            //        modelBuilder.Entity(entityType.ClrType).HasQueryFilter(lambda);
+            //    }
+            //}
+            foreach (var entity in modelBuilder.Model.GetEntityTypes())
             {
-                if (typeof(IEntity).IsAssignableFrom(entityType.ClrType))
+                foreach (var p in entity.GetProperties().Where(p => p.ClrType == typeof(decimal)))
                 {
-                    var param = Expression.Parameter(entityType.ClrType, "e");
-                    var statusProp = Expression.Property(param, nameof(IEntity.Status));
-                    var deletedConst = Expression.Constant(SaasTool.Core.Enums.Status.Deleted);
-                    var body = Expression.NotEqual(statusProp, deletedConst);
-                    var lambda = Expression.Lambda(body, param);
-                    modelBuilder.Entity(entityType.ClrType).HasQueryFilter(lambda);
+                    p.SetPrecision(18);
+                    p.SetScale(2);
                 }
             }
         }
