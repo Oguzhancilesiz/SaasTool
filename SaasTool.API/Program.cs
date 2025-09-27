@@ -55,6 +55,14 @@ namespace SaasTool.API
             builder.Services.AddScoped<IPlanService, PlanService>();
             builder.Services.AddScoped<ITokenService, TokenService>();
             builder.Services.AddScoped<IFeatureService, FeatureService>();
+            builder.Services.AddScoped<IAppService, AppService>();
+            builder.Services.AddScoped<IPlanFeatureService, PlanFeatureService>();
+            builder.Services.AddScoped<IOrganizationService, OrganizationService>();
+            builder.Services.AddScoped<ICustomerService, CustomerService>();
+            builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+            builder.Services.AddScoped<IUsageService, UsageService>();
+            builder.Services.AddScoped<IInvoiceService, InvoiceService>();
+            builder.Services.AddScoped<IPaymentService, PaymentService>();
 
             // ── Mapster
             var mapsterCfg = TypeAdapterConfig.GlobalSettings;
