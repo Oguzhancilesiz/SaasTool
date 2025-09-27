@@ -15,5 +15,6 @@ namespace SaasTool.Entity
         public DateTime CreatedDate { get; set; }
         public DateTime ModifiedDate { get; set; }
         public int AutoID { get; set; }
+        public byte[]? RowVersion { get; set; }
     }
 }

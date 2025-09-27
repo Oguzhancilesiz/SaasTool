@@ -1,6 +1,8 @@
 ﻿using Asp.Versioning;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using SaasTool.DTO.Common;
 using SaasTool.DTO.Security;
 using SaasTool.Entity;
 using SaasTool.Service.Abstracts;
@@ -59,5 +61,13 @@ namespace SaasTool.API.Controllers
             var (token, exp) = _tokenSvc.Create(user, roles);
             return Ok(new TokenResponse { AccessToken = token, ExpiresAtUtc = exp });
         }
+
+        [Authorize(Policy = "Permission:Invoices.Read")]
+        [HttpGet("invoices")]
+        public async Task<IActionResult> ListInvoices([FromQuery] PagedRequest req, CancellationToken ct)
+        {
+            return Ok(new { Message = "You have access to invoices." });
+        }
+
     }
 }
