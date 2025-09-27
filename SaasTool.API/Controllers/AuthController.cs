@@ -19,27 +19,16 @@ namespace SaasTool.API.Controllers
         private readonly ITokenService _tokenSvc;
 
         public AuthController(UserManager<AppUser> userMgr, RoleManager<AppRole> roleMgr, ITokenService tokenSvc)
-        {
-            _userMgr = userMgr;
-            _roleMgr = roleMgr;
-            _tokenSvc = tokenSvc;
-        }
+        { _userMgr = userMgr; _roleMgr = roleMgr; _tokenSvc = tokenSvc; }
 
         [HttpPost("register")]
-        public async Task<ActionResult> Register([FromBody] RegisterDto dto, CancellationToken ct)
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        public async Task<IActionResult> Register([FromBody] RegisterDto dto, CancellationToken ct)
         {
-            var user = new AppUser
-            {
-                Id = Guid.NewGuid(),
-                Email = dto.Email,
-                UserName = dto.Email
-            };
-
+            var user = new AppUser { Id = Guid.NewGuid(), Email = dto.Email, UserName = dto.Email };
             var result = await _userMgr.CreateAsync(user, dto.Password);
-            if (!result.Succeeded)
-                return BadRequest(result.Errors.Select(e => e.Description));
+            if (!result.Succeeded) return BadRequest(result.Errors.Select(e => e.Description));
 
-            // Varsayılan USER rolü (yoksa oluştur)
             const string userRole = "User";
             if (!await _roleMgr.RoleExistsAsync(userRole))
                 await _roleMgr.CreateAsync(new AppRole { Id = Guid.NewGuid(), Name = userRole });
@@ -49,13 +38,13 @@ namespace SaasTool.API.Controllers
         }
 
         [HttpPost("login")]
+        [ProducesResponseType(typeof(TokenResponse), StatusCodes.Status200OK)]
+        [AllowAnonymous]
         public async Task<ActionResult<TokenResponse>> Login([FromBody] LoginDto dto, CancellationToken ct)
         {
             var user = await _userMgr.FindByEmailAsync(dto.Email);
             if (user is null) return Unauthorized();
-
-            if (!await _userMgr.CheckPasswordAsync(user, dto.Password))
-                return Unauthorized();
+            if (!await _userMgr.CheckPasswordAsync(user, dto.Password)) return Unauthorized();
 
             var roles = await _userMgr.GetRolesAsync(user);
             var (token, exp) = _tokenSvc.Create(user, roles);
@@ -64,10 +53,7 @@ namespace SaasTool.API.Controllers
 
         [Authorize(Policy = "Permission:Invoices.Read")]
         [HttpGet("invoices")]
-        public async Task<IActionResult> ListInvoices([FromQuery] PagedRequest req, CancellationToken ct)
-        {
-            return Ok(new { Message = "You have access to invoices." });
-        }
-
+        public IActionResult ListInvoices([FromQuery] PagedRequest req)
+            => Ok(new { Message = "You have access to invoices." });
     }
 }
