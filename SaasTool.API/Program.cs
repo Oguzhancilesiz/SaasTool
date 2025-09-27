@@ -1,20 +1,27 @@
 ﻿using Asp.Versioning;
+using Asp.Versioning.ApiExplorer;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Hellang.Middleware.ProblemDetails;
 using Mapster;
 using MapsterMapper;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+// DİKKAT: Microsoft.Extensions.Internal using'ini KALDIRDIK (çakışma yaratıyordu)
 using Microsoft.OpenApi.Models;
+using SaasTool.API.Infrastructure.Extensions;
 using SaasTool.Core.Abstracts;
+using SaasTool.Core.Security;
 using SaasTool.DAL;
+using SaasTool.DAL.Time;
 using SaasTool.Entity;
 using SaasTool.Service.Abstracts;
 using SaasTool.Service.Concrete;
 using Serilog;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -30,10 +37,27 @@ namespace SaasTool.API
             builder.Host.UseSerilog((ctx, lc) =>
                 lc.ReadFrom.Configuration(ctx.Configuration).WriteTo.Console());
 
+            // ── Core singletons
+            builder.Services.AddSingleton<SaasTool.Core.Abstracts.ISystemClock, SystemClock>(); // ÇAKIŞMASIN
+            builder.Services.AddHttpContextAccessor();
+
+            // ── Validation + ProblemDetails + API versioning + Swagger + OutputCache + Health
+            builder.Services.AddValidationPipeline();               // bizim extension: FluentValidation + ModelState->ProblemDetails
+            builder.Services.AddApiVersioningAndSwagger();          // bizim extension: v1 + explorer + swagger + output cache + health base
+
+            // ── Authorization + Permission policies
+            builder.Services.AddAuthorization();
+            builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+            builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+
             // ── DbContext (retry-on-failure ile)
             builder.Services.AddDbContext<BaseContext>(opt =>
                 opt.UseSqlServer(builder.Configuration.GetConnectionString("dbCon"),
                     sql => sql.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null)));
+
+            // ── Tenant & CurrentUser (stub)
+            builder.Services.AddScoped<ITenantContext>(_ => new HttpTenantContext(_.GetRequiredService<IHttpContextAccessor>()));
+            builder.Services.AddScoped<ICurrentUser>(_ => new HttpCurrentUser(_.GetRequiredService<IHttpContextAccessor>()));
 
             // ── Identity Core
             builder.Services.AddIdentityCore<AppUser>(opt =>
@@ -79,27 +103,14 @@ namespace SaasTool.API
             builder.Services.AddFluentValidationAutoValidation();
             builder.Services.AddValidatorsFromAssembly(typeof(Program).Assembly);
 
-            // ── ProblemDetails (Hellang)
+            // ── Hellang ProblemDetails (opsiyonel ama sende var)
             builder.Services.AddProblemDetails(opts =>
             {
                 opts.IncludeExceptionDetails = (ctx, ex) => builder.Environment.IsDevelopment();
                 opts.MapToStatusCode<InvalidOperationException>(StatusCodes.Status400BadRequest);
             });
 
-            // ── API Versioning
-            builder.Services.AddApiVersioning(o =>
-            {
-                o.DefaultApiVersion = new ApiVersion(1, 0);
-                o.AssumeDefaultVersionWhenUnspecified = true;
-                o.ReportApiVersions = true;
-            }).AddApiExplorer(o =>
-            {
-                o.GroupNameFormat = "'v'VVV";
-                o.SubstituteApiVersionInUrl = true;
-            });
-
-            // ── Swagger
-            builder.Services.AddEndpointsApiExplorer();
+            // ── Swagger’da Bearer şeması
             builder.Services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "SaasTool API", Version = "v1" });
@@ -142,10 +153,14 @@ namespace SaasTool.API
                 }
             });
 
-            // ── HealthChecks
-            builder.Services.AddHealthChecks().AddDbContextCheck<BaseContext>("db");
+            // ── Rate limit
+            builder.Services.AddBasicRateLimit();
 
-            // ── JWT Auth (tek kayıt, ayrıntılı)
+            // ── HealthChecks (ek)
+            builder.Services.AddHealthChecks().AddDbContextCheck<BaseContext>("db");
+            builder.Services.AddAppHealthChecks(builder.Configuration);
+
+            // ── JWT Auth
             builder.Services.AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -167,7 +182,7 @@ namespace SaasTool.API
                 };
             });
 
-            var app = builder.Build();
+            var app = builder.Build(); // <<< app'ten önce hiçbir app.Use... çağrısı yok
 
             // ── Pipeline
             app.UseSerilogRequestLogging();
@@ -181,14 +196,52 @@ namespace SaasTool.API
 
             app.UseHttpsRedirection();
             app.UseCors("default");
+            app.UseRateLimiter();          // <<< BURAYA TAŞINDI
             app.UseAuthentication();
             app.UseAuthorization();
 
             app.MapControllers();
             app.MapHealthChecks("/health");
+            app.MapHealthChecks("/readyz"); // <<< BURAYA TAŞINDI
 
-            // ── App start
             await app.RunAsync();
+        }
+
+        // --- Basit HTTP-tabanlı implementasyonlar (sende gerçekleriyle değiştirebilirsin) ---
+        public sealed class HttpTenantContext : ITenantContext
+        {
+            public Guid? Id { get; set; }     // interface set istiyorsa uyumlu
+            public string? Code { get; set; } // interface set istiyorsa uyumlu
+
+            public HttpTenantContext(IHttpContextAccessor accessor)
+            {
+                var http = accessor.HttpContext;
+                if (http is not null && http.Request.Headers.TryGetValue("X-Tenant-Id", out var v) && Guid.TryParse(v.ToString(), out var g))
+                    Id = g;
+                if (http is not null && http.Request.Headers.TryGetValue("X-Tenant-Code", out var vc))
+                    Code = vc.ToString();
+            }
+        }
+
+        public sealed class HttpCurrentUser : ICurrentUser
+        {
+            public Guid? UserId { get; }
+            public string? Email { get; }
+            public bool IsAuthenticated { get; }
+            private readonly ClaimsPrincipal _user;
+
+            public HttpCurrentUser(IHttpContextAccessor accessor)
+            {
+                _user = accessor.HttpContext?.User ?? new ClaimsPrincipal();
+                IsAuthenticated = _user.Identity?.IsAuthenticated ?? false;
+                if (IsAuthenticated)
+                {
+                    var id = _user.FindFirst("sub")?.Value ?? _user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                    if (Guid.TryParse(id, out var g)) UserId = g;
+                    Email = _user.FindFirst(ClaimTypes.Email)?.Value;
+                }
+            }
+            public bool IsInRole(string role) => _user.IsInRole(role);
         }
     }
 }
