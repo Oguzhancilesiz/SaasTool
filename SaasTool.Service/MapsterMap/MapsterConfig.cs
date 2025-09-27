@@ -50,7 +50,7 @@ public class MapsterConfig : IRegister
         cfg.NewConfig<UserOrganization, UserOrganizationDto>();
         cfg.NewConfig<UserOrganizationCreateDto, UserOrganization>()
             .Map(d => d.Id, _ => Guid.NewGuid())
-            .Map(d => d.JoinedAt, _ => DateTime.UtcNow);
+            .Map(d => d.JoinedAt, _ => DateTime.UtcNow == default ? DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc) : DateTime.UtcNow);
         cfg.NewConfig<UserOrganizationUpdateDto, UserOrganization>();
 
         cfg.NewConfig<Customer, CustomerDto>();
@@ -90,8 +90,8 @@ public class MapsterConfig : IRegister
         // Billing: Invoices
         cfg.NewConfig<InvoiceLine, InvoiceLineDto>();
         cfg.NewConfig<InvoiceLineCreateDto, InvoiceLine>()
-            .Map(d => d.Id, _ => Guid.NewGuid())
-            .Map(d => d.LineTotal, s => s.Quantity * s.UnitPrice);
+         .Map(d => d.Id, _ => Guid.NewGuid())
+            .Map(d => d.LineTotal, s => (s.Quantity <= 0 ? 0 : s.Quantity) * (s.UnitPrice < 0 ? 0 : s.UnitPrice));
 
         cfg.NewConfig<Invoice, InvoiceDto>()
             .Map(d => d.Lines, s => s.Lines);

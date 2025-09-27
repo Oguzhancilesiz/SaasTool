@@ -6,11 +6,6 @@ using SaasTool.DTO.Billing;
 using SaasTool.DTO.Common;
 using SaasTool.Entity;
 using SaasTool.Service.Abstracts;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SaasTool.Service.Concrete
 {
@@ -29,18 +24,18 @@ namespace SaasTool.Service.Concrete
 
         public async Task<PagedResponse<UsageRecordDto>> ListAsync(Guid? subscriptionId, Guid? featureId, PagedRequest req, CancellationToken ct)
         {
-            var q = await _uow.Repository<UsageRecord>().GetAllActives();
+            var n = req.Normalize();
+            var q = (await _uow.Repository<UsageRecord>().GetAllActives()).AsNoTracking();
             if (subscriptionId is not null) q = q.Where(x => x.SubscriptionId == subscriptionId);
             if (featureId is not null) q = q.Where(x => x.FeatureId == featureId);
 
             var total = await q.CountAsync(ct);
             var items = await q.OrderByDescending(x => x.PeriodStart)
-                               .Skip((req.Page - 1) * req.PageSize)
-                               .Take(req.PageSize)
+                               .Skip((n.Page - 1) * n.PageSize)
+                               .Take(n.PageSize)
                                .ProjectToType<UsageRecordDto>(_mapper.Config)
                                .ToListAsync(ct);
-            return new(items, total, req.Page, req.PageSize);
+            return new(items, total, n.Page, n.PageSize);
         }
     }
-
 }

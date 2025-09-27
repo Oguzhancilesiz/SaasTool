@@ -6,11 +6,6 @@ using SaasTool.DTO.Common;
 using SaasTool.DTO.Orgs;
 using SaasTool.Entity;
 using SaasTool.Service.Abstracts;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace SaasTool.Service.Concrete
 {
@@ -30,8 +25,7 @@ namespace SaasTool.Service.Concrete
         public async Task UpdateAsync(Guid id, CustomerUpdateDto dto, CancellationToken ct)
         {
             var repo = _uow.Repository<Customer>();
-            var e = await repo.GetById(id);
-            if (e is null) throw new InvalidOperationException("Customer not found.");
+            var e = await repo.GetById(id) ?? throw new InvalidOperationException("Customer not found.");
             _mapper.Map(dto, e);
             await repo.Update(e);
             await _uow.SaveChangesAsync();
@@ -45,18 +39,21 @@ namespace SaasTool.Service.Concrete
 
         public async Task<PagedResponse<CustomerDto>> ListAsync(Guid? organizationId, PagedRequest req, CancellationToken ct)
         {
-            var q = await _uow.Repository<Customer>().GetAllActives();
+            var n = req.Normalize();
+            var q = (await _uow.Repository<Customer>().GetAllActives()).AsNoTracking();
+
             if (organizationId is not null) q = q.Where(x => x.OrganizationId == organizationId);
-            if (!string.IsNullOrWhiteSpace(req.Search))
-                q = q.Where(x => x.Name.Contains(req.Search) || x.Email!.Contains(req.Search));
+            if (!string.IsNullOrWhiteSpace(n.Search))
+                q = q.Where(x => x.Name.Contains(n.Search) || (x.Email ?? "").Contains(n.Search));
 
             var total = await q.CountAsync(ct);
             var items = await q.OrderBy(x => x.AutoID)
-                               .Skip((req.Page - 1) * req.PageSize)
-                               .Take(req.PageSize)
+                               .Skip((n.Page - 1) * n.PageSize)
+                               .Take(n.PageSize)
                                .ProjectToType<CustomerDto>(_mapper.Config)
                                .ToListAsync(ct);
-            return new(items, total, req.Page, req.PageSize);
+
+            return new(items, total, n.Page, n.PageSize);
         }
 
         public async Task DeleteAsync(Guid id, CancellationToken ct)
@@ -68,5 +65,4 @@ namespace SaasTool.Service.Concrete
             await _uow.SaveChangesAsync();
         }
     }
-
 }

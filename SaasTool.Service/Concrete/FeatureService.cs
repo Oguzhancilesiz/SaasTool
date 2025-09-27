@@ -14,10 +14,7 @@ public sealed class FeatureService : IFeatureService
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
 
-    public FeatureService(IUnitOfWork uow, IMapper mapper)
-    {
-        _uow = uow; _mapper = mapper;
-    }
+    public FeatureService(IUnitOfWork uow, IMapper mapper) { _uow = uow; _mapper = mapper; }
 
     public async Task<Guid> CreateAsync(FeatureCreateDto dto, CancellationToken ct)
     {
@@ -30,8 +27,7 @@ public sealed class FeatureService : IFeatureService
     public async Task UpdateAsync(Guid id, FeatureUpdateDto dto, CancellationToken ct)
     {
         var repo = _uow.Repository<Feature>();
-        var entity = await repo.GetById(id);
-        if (entity is null) throw new InvalidOperationException("Feature not found.");
+        var entity = await repo.GetById(id) ?? throw new InvalidOperationException("Feature not found.");
         _mapper.Map(dto, entity);
         await repo.Update(entity);
         await _uow.SaveChangesAsync();
@@ -45,19 +41,21 @@ public sealed class FeatureService : IFeatureService
 
     public async Task<PagedResponse<FeatureDto>> ListAsync(Guid? appId, PagedRequest req, CancellationToken ct)
     {
-        var q = await _uow.Repository<Feature>().GetAllActives();
+        var n = req.Normalize();
+        var q = (await _uow.Repository<Feature>().GetAllActives()).AsNoTracking();
+
         if (appId is not null) q = q.Where(x => x.AppId == appId);
-        if (!string.IsNullOrWhiteSpace(req.Search))
-            q = q.Where(x => x.Name.Contains(req.Search) || x.Code.Contains(req.Search));
+        if (!string.IsNullOrWhiteSpace(n.Search))
+            q = q.Where(x => x.Name.Contains(n.Search) || x.Code.Contains(n.Search));
 
         var total = await q.CountAsync(ct);
         var items = await q.OrderBy(x => x.AutoID)
-                           .Skip((req.Page - 1) * req.PageSize)
-                           .Take(req.PageSize)
+                           .Skip((n.Page - 1) * n.PageSize)
+                           .Take(n.PageSize)
                            .ProjectToType<FeatureDto>(_mapper.Config)
                            .ToListAsync(ct);
 
-        return new(items, total, req.Page, req.PageSize);
+        return new(items, total, n.Page, n.PageSize);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct)
