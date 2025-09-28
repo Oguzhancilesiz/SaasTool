@@ -1,4 +1,5 @@
-﻿using SaasTool.DTO.Common;
+﻿using SaasTool.Core.Enums;
+using SaasTool.DTO.Common;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,9 +13,9 @@ namespace SaasTool.DTO.Plans
         public string Code { get; init; } = default!;
         public string Name { get; init; } = default!;
         public string? Description { get; init; }
-        public int Currency { get; init; }         // Currency enum dışarı int
+        public Currency Currency { get; init; }         // Currency enum dışarı int
         public decimal Price { get; init; }
-        public int BillingPeriod { get; init; }     // BillingPeriod enum int
+        public BillingPeriod BillingPeriod { get; init; }     // BillingPeriod enum int
         public bool IsPublic { get; init; }
         public int TrialDays { get; init; }
     }
@@ -24,9 +25,9 @@ namespace SaasTool.DTO.Plans
         public string Code { get; init; } = default!;
         public string Name { get; init; } = default!;
         public string? Description { get; init; }
-        public int Currency { get; init; }
+        public Currency Currency { get; init; }
         public decimal Price { get; init; }
-        public int BillingPeriod { get; init; }
+        public BillingPeriod BillingPeriod { get; init; }
         public bool IsPublic { get; init; } = true;
         public int TrialDays { get; init; } = 0;
     }

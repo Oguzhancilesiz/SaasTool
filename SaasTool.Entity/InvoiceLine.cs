@@ -18,6 +18,7 @@ namespace SaasTool.Entity
 
         public Guid? FeatureId { get; set; }
         public Guid? SubscriptionId { get; set; }
+        public Subscription? Subscription { get; set; }
     }
 
 }
