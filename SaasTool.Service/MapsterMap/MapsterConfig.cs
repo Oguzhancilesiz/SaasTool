@@ -121,5 +121,16 @@ public class MapsterConfig : IRegister
         cfg.NewConfig<ApiKeyCreateDto, ApiKey>()
             .Map(d => d.Id, _ => Guid.NewGuid())
             .Ignore(d => d.KeyHash); // Hash üretimi servis katmanında
+
+
+        cfg.NewConfig<AppPlan, AppPlanDto>()
+         .Map(d => d.AppCode, s => s.App.Code)
+         .Map(d => d.PlanCode, s => s.Plan.Code)
+         .Map(d => d.PlanName, s => s.Plan.Name);
+
+        cfg.NewConfig<AppPlanCreateDto, AppPlan>();
+        cfg.NewConfig<AppPlanUpdateDto, AppPlan>();
+
+        cfg.ForType<DTO.Dashboard.SeriesPointDto, DTO.Dashboard.SeriesPointDto>(); // no-op
     }
 }
