@@ -1,3 +1,4 @@
+// middleware.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
@@ -16,18 +17,32 @@ const PROTECTED = [
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const needsAuth = PROTECTED.some((p) => pathname === p || pathname.startsWith(p + "/"));
+
+  // 1) Kökü login'e (ya da dashboard'a) yönlendir
+  if (pathname === "/") {
+    const url = req.nextUrl.clone();
+    url.pathname = "/login"; // istersen "/dashboard"
+    return NextResponse.redirect(url);
+  }
+
+  // 2) Korumalı sayfalar için auth kontrolü
+  const needsAuth =
+    PROTECTED.some(p => pathname === p || pathname.startsWith(p + "/"));
+
   if (!needsAuth) return NextResponse.next();
 
   const token = req.cookies.get("token")?.value;
   if (!token) {
-    const url = new URL("/login", req.url);
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
     url.searchParams.set("returnUrl", pathname);
     return NextResponse.redirect(url);
   }
+
   return NextResponse.next();
 }
 
+// 3) Matcher: statikleri ve API'yi dışarıda bırak
 export const config = {
-  matcher: ["/((?!_next|api|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api).*)"],
 };
