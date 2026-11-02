@@ -61,3 +61,6 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+# GitHub language stats: Razor views are HTML+Razor, not plain HTML
+*.cshtml linguist-language=HTML+Razor
