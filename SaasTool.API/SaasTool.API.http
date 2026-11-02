@@ -1,6 +1,18 @@
 @SaasTool.API_HostAddress = http://localhost:5033
+@token = <paste accessToken from login>
 
-GET {{SaasTool.API_HostAddress}}/weatherforecast/
+POST {{SaasTool.API_HostAddress}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "<password>"
+}
+
+###
+
+GET {{SaasTool.API_HostAddress}}/api/v1/plans?page=1&pageSize=20
 Accept: application/json
+Authorization: Bearer {{token}}
 
 ###
